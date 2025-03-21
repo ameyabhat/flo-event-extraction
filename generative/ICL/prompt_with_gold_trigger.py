@@ -281,14 +281,15 @@ def prepare_prompt(train_json_file, test_json_file, how_many_test_sample = 1):
     evaluate_old.trigger_scores(eval_dict)
 
 
-import openai
+from openai import OpenAI
+
+client = OpenAI(api_key=my_api_key)
 from time import sleep
 import backoff
 from openai.error import RateLimitError
 
 my_api_key = "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"
 
-openai.api_key = my_api_key
 
 
 
@@ -300,17 +301,15 @@ def completions_with_backoff_davinci(prompt):
     while got_res is False and try_time < 100:
         try_time += 1
         try:
-            res = openai.Completion.create(
-                model="text-davinci-003",
-                prompt=prompt,
-                temperature=0.0,
-                max_tokens=256,
-                top_p=1,
-                frequency_penalty=0,
-                presence_penalty=0,
-                stop=["\n"],
-                n=1
-            )
+            res = client.completions.create(model="text-davinci-003",
+            prompt=prompt,
+            temperature=0.0,
+            max_tokens=256,
+            top_p=1,
+            frequency_penalty=0,
+            presence_penalty=0,
+            stop=["\n"],
+            n=1)
             got_res = True
         # except openai.error.InvalidRequestError:
         #     raise Exception("openai.error.InvalidRequestError")
@@ -329,15 +328,14 @@ def completion_with_backoff(prompt):
     while not got_res and try_time<5:
         try_time += 1
         try:
-            res = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant to perform the text completion."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.0,
-                max_tokens=294,
-                stop=["\n"])
+            res = client.chat.completions.create(model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant to perform the text completion."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.0,
+            max_tokens=294,
+            stop=["\n"])
 
             #res = openai.ChatCompletion.create(model="gpt-3.5-turbo", prompt=prompt, temperature=0, max_tokens=294, stop=["\n\n"], n=1)
             got_res = True

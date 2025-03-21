@@ -12,7 +12,8 @@ import random
 random.seed(1234)
 import tiktoken
 import utils.evaluate as evaluate
-import openai
+from openai import OpenAI
+
 from openai import RateLimitError
 from time import sleep
 import backoff
@@ -37,7 +38,7 @@ if not OPENAI_API_KEY:
 if not ANTHROPIC_API_KEY:
     raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
 
-openai.api_key = OPENAI_API_KEY
+client = OpenAI(api_key=OPENAI_API_KEY)
 anthropic_client = anthropic.Client(api_key=ANTHROPIC_API_KEY)
 
 def create_dict(event_dict, temp_type):
@@ -294,17 +295,15 @@ def completions_with_backoff_davinci(prompt):
     while got_res is False and try_time < 100:
         try_time += 1
         try:
-            res = openai.Completion.create(
-                model="text-davinci-003",
-                prompt=prompt,
-                temperature=0.0,
-                max_tokens=256,
-                top_p=1,
-                frequency_penalty=0,
-                presence_penalty=0,
-                stop=["\n\n"],
-                n=1
-            )
+            res = client.completions.create(model="text-davinci-003",
+            prompt=prompt,
+            temperature=0.0,
+            max_tokens=256,
+            top_p=1,
+            frequency_penalty=0,
+            presence_penalty=0,
+            stop=["\n\n"],
+            n=1)
             got_res = True
         except RateLimitError:
             sleep(3)
@@ -342,25 +341,23 @@ def completion_with_backoff(prompt, model_name):
                     }]
                 }
             elif model_name == "gpt-4":
-                res = openai.ChatCompletion.create(
-                    model="gpt-4",
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant to perform the text completion."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.0,
-                    max_tokens=294,
-                    stop=["\n\n"])
+                res = client.chat.completions.create(model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant to perform the text completion."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.0,
+                max_tokens=294,
+                stop=["\n\n"])
             else:  # gpt-3.5-turbo
-                res = openai.ChatCompletion.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant to perform the text completion."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.0,
-                    max_tokens=294,
-                    stop=["\n\n"])
+                res = client.chat.completions.create(model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant to perform the text completion."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.0,
+                max_tokens=294,
+                stop=["\n\n"])
             got_res = True
         except RateLimitError as e1:
             print('E1 message: ', e1)
