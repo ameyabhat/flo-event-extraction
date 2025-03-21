@@ -2,7 +2,7 @@
 ## Utilities file for string operations such as to find indices from an email for generative models
 ## LCS: Longest common subsequence
 #######
-from timeout import timeout
+from utils.timeout import timeout
 import copy
 def get_random_word(word):
     return word + "1"

@@ -1,9 +1,23 @@
 import json, re
-from genTemplates import *
+import os
+import sys
+
+# Add the project root directory to the Python path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+sys.path.append(project_root)
+
+from utils.genTemplates import *
+
 import random
 random.seed(1234)
 import tiktoken
-import evaluate
+import utils.evaluate as evaluate
+import openai
+from openai import RateLimitError
+from time import sleep
+import backoff
+import anthropic  # For Claude
+
 count_dict = {'Request Meeting': 0, 'Request Data': 0, 'Request Action': 0, 'Request Action Data': 0, 'Request Meeting Data': 0, 'Deliver Data': 0, 'Deliver Action Data': 0, 'Deliver Meeting Data': 0, 'Amend Data': 0, 'Amend Meeting Data': 0}
 enc = tiktoken.encoding_for_model("gpt-4")
 min_required = 2
@@ -14,6 +28,17 @@ MAX_PROMPT_LENGTH = 3700
 max_gen_tokens = 300
 K = 6
 
+# API Keys from environment variables
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
+
+if not OPENAI_API_KEY:
+    raise ValueError("OPENAI_API_KEY environment variable is not set")
+if not ANTHROPIC_API_KEY:
+    raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
+
+openai.api_key = OPENAI_API_KEY
+anthropic_client = anthropic.Client(api_key=ANTHROPIC_API_KEY)
 
 def create_dict(event_dict, temp_type):
     event_type = event_dict.pop('event_type')
@@ -261,17 +286,6 @@ def prepare_prompt(train_json_file, test_json_file, model = 'davinci'):
     evaluate.trigger_scores(eval_dict)
 
 
-import openai
-from time import sleep
-import backoff
-from openai.error import RateLimitError
-
-my_api_key = "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"
-
-openai.api_key = my_api_key
-
-
-
 @backoff.on_exception(backoff.expo, RateLimitError)
 def completions_with_backoff_davinci(prompt):
     got_res = False
@@ -300,22 +314,53 @@ def completions_with_backoff_davinci(prompt):
 
 
 @backoff.on_exception(backoff.expo, RateLimitError)
-def completion_with_backoff(prompt):
+def completion_with_backoff(prompt, model_name):
     got_res = False
     res = {"choices": []}
-    try_time  = 0
-    while not got_res and try_time<5:
+    try_time = 0
+    while not got_res and try_time < 5:
         try_time += 1
         try:
-            res = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant to perform the text completion."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.0,
-                max_tokens=294,
-                stop=["\n\n"])
+            if model_name == "claude":
+                res = anthropic_client.messages.create(
+                    model="claude-3-7-sonnet-20250219",
+                    max_tokens=294,
+                    messages=[{
+                        "role": "user",
+                        "content": prompt
+                    }],
+                    temperature=0.0,
+                    stop_sequences=["\n\n"]
+                )
+                # Convert Claude response to match OpenAI format
+                res = {
+                    "choices": [{
+                        "message": {
+                            "content": res.content[0].text
+                        },
+                        "finish_reason": "stop"
+                    }]
+                }
+            elif model_name == "gpt-4":
+                res = openai.ChatCompletion.create(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant to perform the text completion."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.0,
+                    max_tokens=294,
+                    stop=["\n\n"])
+            else:  # gpt-3.5-turbo
+                res = openai.ChatCompletion.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant to perform the text completion."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.0,
+                    max_tokens=294,
+                    stop=["\n\n"])
             got_res = True
         except RateLimitError as e1:
             print('E1 message: ', e1)
@@ -328,14 +373,15 @@ def completion_with_backoff(prompt):
 
 def get_response(story, model):
     my_test_prompt = f"{story}"
-    if(model=='davinci'):
+    if model == 'davinci':
         return completions_with_backoff_davinci(my_test_prompt)
     else:
-        return completion_with_backoff(my_test_prompt)
+        return completion_with_backoff(my_test_prompt, model)
 
 from argparse import ArgumentParser
 parser = ArgumentParser()
-parser.add_argument("--model",type=str,required=True,help="GPT model to experiment with")
+parser.add_argument("--model", type=str, required=True, choices=["davinci", "turbo", "gpt-4", "claude"], help="Model to experiment with")
 if __name__ == '__main__':
-    prepare_prompt('data/icl_data/train_prompt_data.json', 'data/icl_data/dev_prompt_data.json')
+    args = parser.parse_args()
+    prepare_prompt('data/icl_data/train_prompt_data.json', 'data/icl_data/dev_prompt_data.json', args.model)
 

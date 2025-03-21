@@ -1,5 +1,5 @@
-from timeout import timeout
-from string_utils import extract_span_close_to_trigger, exact_match_on_index, get_arg_span_indices_from_email
+from utils.timeout import timeout
+from utils.string_utils import extract_span_close_to_trigger, exact_match_on_index, get_arg_span_indices_from_email
 import ast, re
 from tqdm import tqdm
 from fuzzywuzzy import fuzz
